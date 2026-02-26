@@ -1,0 +1,25 @@
+name: feature-nodejs-pipeline
+on:
+  workflow_call:
+    inputs:
+      project:
+        required: true
+        type: string
+      component:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+jobs:
+  feature-nodejs-pipeline:
+    runs-on: self-hosted
+    steps: 
+    - name: checkout code
+      uses: actions/checkout@v6
+
+    - name: list files
+      run: ls -l
+
+    - name: Print Inputs
+      run: echo ${{ inputs.project }}
