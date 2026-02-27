@@ -37,7 +37,17 @@ jobs:
       run: npm install
     
     - name: Run Unit Tests
+      id: unit_tests
       run: echo "Unit test completed"
+
+    - name: Update DOCKER_BUILD status
+      if: always()
+      uses: azhardevmd/workflows/.github/actions/set-commit-status@main
+      with:
+        state: ${{ steps.unit_tests.outcome }}
+        context: UNIT_TEST
+        status_description: "Unit Test ${{ steps.unit_tests.outcome }}"
+        target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     
     - name: Docker Build
       run: |
