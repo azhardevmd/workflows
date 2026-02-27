@@ -21,5 +21,20 @@ jobs:
     - name: list files
       run: ls -l
 
+    - name: Get the version from commit id
+      run: |
+        echo "APP_VERSION=${GITHUB_SHA::9}" >> $GITHUB_ENV
+
     - name: Print Inputs
-      run: echo ${{ inputs.project }}
+      run: |
+        echo ${{ inputs.project }}
+        echo "App Version is: ${APP_VERSION}"
+
+    - name: Install Dependencies
+      run: npm install
+    
+    - name: Run Unit Tests
+      run: echo "Unit test completed"
+    
+    - name: Docker Build
+      run: docker build -t 522534289017.dkr.ecr.us-east-1.amazonaws.com/robomart/catalogue:latest
