@@ -11,6 +11,9 @@ on:
       environment:
         required: true
         type: string
+env:
+  ACCOUNT_ID: 522534289017
+
 jobs:
   feature-nodejs-pipeline:
     runs-on: self-hosted
@@ -37,4 +40,6 @@ jobs:
       run: echo "Unit test completed"
     
     - name: Docker Build
-      run: docker build -t 522534289017.dkr.ecr.us-east-1.amazonaws.com/robomart/catalogue:latest
+      run: |
+        docker build -t ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${APP_VERSION}
+        docker images
