@@ -60,7 +60,7 @@ jobs:
       uses: azhardevmd/workflows/.github/actions/set-commit-status@main
       with:
         state: ${{ steps.docker_build.outcome }}
-        context: UNIT_TEST
+        context: DOCKER_BUILD
         status_description: "Docker Build ${{ steps.docker_build.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
