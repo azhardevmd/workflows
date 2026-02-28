@@ -55,86 +55,52 @@ jobs:
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 # ---------------- SECURITY GATE ----------------
-    - name: Security Check (Dependabot + Trivy)
-      id: security_check
-      # env:
-      #   GH_TOKEN: ${{ secrets.GH_TOKEN }}
-      shell: bash
+    - name: Install jq (RHEL)
       run: |
+        sudo yum install -y jq || sudo dnf install -y jq
 
-        echo "🔍 Running Trivy scan..."
-        trivy image \
-          --scanners vuln \
-          --severity HIGH,CRITICAL,MEDIUM \
-          --pkg-types os \
-          --exit-code 1 \
-          --format table \
-          ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${APP_VERSION}
+    - name: Dependabot Security Gate
+      id: dependabot_scan
+      env:
+        GH_TOKEN: ${{ secrets.DEPENDABOT_PAT }}
+        REPO: ${{ github.repository }}
+      run: |
+        echo "Checking Dependabot alerts for $REPO"
 
-        TRIVY_RESULT=$?
+        ALERTS=$(curl -s \
+          -H "Authorization: Bearer ${GH_TOKEN}" \
+          -H "Accept: application/vnd.github+json" \
+          "https://api.github.com/repos/${REPO}/dependabot/alerts")
 
-        if [ "$TRIVY_RESULT" -ne 0 ]; then
-          echo "❌ Trivy found vulnerabilities (HIGH/CRITICAL/MEDIUM)"
+        echo "$ALERTS"
+
+        # Ensure API returned array
+        if ! echo "$ALERTS" | jq -e 'type=="array"' > /dev/null; then
+          echo "Failed to fetch Dependabot alerts"
           exit 1
         fi
 
-        echo "✅ Trivy scan passed without blocking issues."
+        CRITICAL=$(echo "$ALERTS" | jq '[.[] | select(.security_advisory.severity=="critical")] | length')
+        HIGH=$(echo "$ALERTS" | jq '[.[] | select(.security_advisory.severity=="high")] | length')
 
-    - name: Update Security_Check status
+        echo "Critical alerts: $CRITICAL"
+        echo "High alerts: $HIGH"
+
+        if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+          echo "Security vulnerabilities found!"
+          exit 1
+        else
+          echo "No critical/high vulnerabilities"
+        fi
+
+    - name: Update DEPENDABOT_SCAN status
       if: always()
       uses: azhardevmd/workflows/.github/actions/set-commit-status@main
       with:
-        state: ${{ steps.security_check.outcome }}
-        context: security_check
-        status_description: "Dependency Review ${{ steps.security_check.outcome }}"
+        state: ${{ steps.dependabot_scan.outcome }}
+        context: DEPENDABOT_SCAN
+        status_description: "Dependabot Scan ${{ steps.dependabot_scan.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
-    # - name: Install jq (RHEL)
-    #   run: |
-    #     sudo yum install -y jq || sudo dnf install -y jq
-
-    # - name: Dependabot Security Gate
-    #   id: dependabot_scan
-    #   env:
-    #     GH_TOKEN: ${{ secrets.DEPENDABOT_PAT }}
-    #     REPO: ${{ github.repository }}
-    #   run: |
-    #     echo "Checking Dependabot alerts for $REPO"
-
-    #     ALERTS=$(curl -s \
-    #       -H "Authorization: Bearer ${GH_TOKEN}" \
-    #       -H "Accept: application/vnd.github+json" \
-    #       "https://api.github.com/repos/${REPO}/dependabot/alerts")
-
-    #     echo "$ALERTS"
-
-    #     # Ensure API returned array
-    #     if ! echo "$ALERTS" | jq -e 'type=="array"' > /dev/null; then
-    #       echo "Failed to fetch Dependabot alerts"
-    #       exit 1
-    #     fi
-
-    #     CRITICAL=$(echo "$ALERTS" | jq '[.[] | select(.security_advisory.severity=="critical")] | length')
-    #     HIGH=$(echo "$ALERTS" | jq '[.[] | select(.security_advisory.severity=="high")] | length')
-
-    #     echo "Critical alerts: $CRITICAL"
-    #     echo "High alerts: $HIGH"
-
-    #     if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
-    #       echo "Security vulnerabilities found!"
-    #       exit 1
-    #     else
-    #       echo "No critical/high vulnerabilities"
-    #     fi
-
-    # - name: Update DEPENDABOT_SCAN status
-    #   if: always()
-    #   uses: azhardevmd/workflows/.github/actions/set-commit-status@main
-    #   with:
-    #     state: ${{ steps.dependabot_scan.outcome }}
-    #     context: DEPENDABOT_SCAN
-    #     status_description: "Dependabot Scan ${{ steps.dependabot_scan.outcome }}"
-    #     target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 # ---------------- DOCKER BUILD ----------------
     - name: Docker Build
