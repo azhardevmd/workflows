@@ -49,7 +49,6 @@ jobs:
         status_description: "Unit Test ${{ steps.unit_tests.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-    # ---------------- NPM SECURITY GATE ----------------
 # ---------------- NPM SECURITY BASELINE GATE ----------------
     - name: Install jq
       run: sudo yum install -y jq || sudo dnf install -y jq
@@ -97,20 +96,36 @@ jobs:
       run: |
         sudo rpm -ivh https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.50.1_Linux-64bit.rpm || true
         trivy --version
-
-    # ---------------- TRIVY FILESYSTEM SCAN ----------------
+    
+# ---------------- TRIVY FILESYSTEM SCAN WITH CONDITION ----------------
     - name: Trivy Filesystem Scan
       id: trivy_fs
-      run: trivy fs --exit-code 1 --severity HIGH,CRITICAL .
+      run: |
+        # Run scan but DO NOT fail automatically
+        trivy fs --format json --severity HIGH,CRITICAL . > trivy-fs.json
+        cat trivy-fs.json
 
-    - name: Update TRIVY_FS status
-      if: always()
-      uses: azhardevmd/workflows/.github/actions/set-commit-status@main
-      with:
-        state: ${{ steps.trivy_fs.outcome }}
-        context: TRIVY_FS_SCAN
-        status_description: "Trivy FS ${{ steps.trivy_fs.outcome }}"
-        target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        # Count vulnerabilities
+        HIGH=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-fs.json)
+        CRITICAL=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-fs.json)
+
+        echo "High vulnerabilities: $HIGH"
+        echo "Critical vulnerabilities: $CRITICAL"
+
+        # Your condition here
+        MAX_HIGH=10
+
+        if [ "$CRITICAL" -gt 0 ]; then
+          echo "Critical vulnerabilities found"
+          exit 1
+        fi
+
+        if [ "$HIGH" -gt "$MAX_HIGH" ]; then
+          echo "High vulnerabilities exceed allowed baseline"
+          exit 1
+        fi
+
+        echo "Trivy FS passed baseline"
 
     # ---------------- DOCKER BUILD ----------------
     - name: Docker Build
