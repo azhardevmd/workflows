@@ -35,7 +35,8 @@ jobs:
 
     - name: Install Dependencies
       run: npm install
-    
+
+# ---------------- UNIT TEST ----------------
     - name: Run Unit Tests
       id: unit_tests
       run: echo "Unit test completed"
@@ -48,7 +49,12 @@ jobs:
         context: UNIT_TEST
         status_description: "Unit Test ${{ steps.unit_tests.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-    
+
+# ---------------- SECURITY GATE ----------------
+    - name: Install jq (RHEL)
+      run: |
+        sudo yum install -y jq || sudo dnf install -y jq
+
     - name: Dependabot Security Gate
       id: dependabot_check
       env:
@@ -77,6 +83,7 @@ jobs:
           echo "No critical/high vulnerabilities"
         fi
 
+# ---------------- DOCKER BUILD ----------------
     - name: Docker Build
       id: docker_build
       run: |
@@ -92,6 +99,7 @@ jobs:
         status_description: "Docker Build ${{ steps.docker_build.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
+# ---------------- PUSH IMAGE ----------------
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v5.1.1
       with:
