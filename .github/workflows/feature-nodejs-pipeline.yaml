@@ -55,19 +55,38 @@ jobs:
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 # ---------------- SECURITY GATE ----------------
-    - name: Dependency Review (Fail on High/Critical)
-      id: dependency_review
-      uses: actions/dependency-review-action@v4
-      with:
-        fail-on-severity: high
+    - name: Security Check (Dependabot + Trivy)
+      id: security_check
+      # env:
+      #   GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      shell: bash
+      run: |
 
-    - name: Update DEPENDENCY_REVIEW status
+        echo "🔍 Running Trivy scan..."
+        trivy image \
+          --scanners vuln \
+          --severity HIGH,CRITICAL,MEDIUM \
+          --pkg-types os \
+          --exit-code 1 \
+          --format table \
+          ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${APP_VERSION}
+
+        TRIVY_RESULT=$?
+
+        if [ "$TRIVY_RESULT" -ne 0 ]; then
+          echo "❌ Trivy found vulnerabilities (HIGH/CRITICAL/MEDIUM)"
+          exit 1
+        fi
+
+        echo "✅ Trivy scan passed without blocking issues."
+
+    - name: Update Security_Check status
       if: always()
       uses: azhardevmd/workflows/.github/actions/set-commit-status@main
       with:
-        state: ${{ steps.dependency_review.outcome }}
-        context: DEPENDENCY_REVIEW
-        status_description: "Dependency Review ${{ steps.dependency_review.outcome }}"
+        state: ${{ steps.security_check.outcome }}
+        context: security_check
+        status_description: "Dependency Review ${{ steps.security_check.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
     # - name: Install jq (RHEL)
