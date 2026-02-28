@@ -165,8 +165,29 @@ jobs:
         aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
         docker push ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${APP_VERSION}
 
-# -------------- DEPLOY -------------------
+# -------------- AUTHENTICATE to EKS -------------------
     - name: Authenticate to EKS
       run: |
         aws eks update-kubeconfig --region us-east-1 --name robomart-dev
         kubectl get nodes
+
+# -------------- CHECKOUT TO DEPLOY -------------------
+    - name: Checkout Catalogue Deploy Repo
+      uses: actions/checkout@v4
+      with: 
+        repository: azharmd-dev/catalogue-deploy
+
+# -------------- DEV TO DEPLOY -------------------
+    - name: Deploy to DEV Cluster
+      id: dev_deploy
+      run: | 
+        helm upgrade --install ${{ inputs.component }} -f values-${{ inputs.environment }}.yaml --set deployment.imageVersion=${APP_VERSION} -n ${{ inputs.project }} --atomic --wait --timeout=5m .
+    
+    - name: DEV_DEPLOY status
+      if: always()
+      uses: azhardevmd/workflows/.github/actions/set-commit-status@main
+      with:
+        state: ${{ steps.dev_deploy.outcome }}
+        context: dev_deploy
+        status_description: "DEV Deploy ${{ steps.dev_deploy.outcome }}"
+        target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
