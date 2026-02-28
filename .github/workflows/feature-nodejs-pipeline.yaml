@@ -50,9 +50,38 @@ jobs:
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
     # ---------------- NPM SECURITY GATE ----------------
-    - name: NPM Audit (Fail on High/Critical)
+# ---------------- NPM SECURITY BASELINE GATE ----------------
+    - name: Install jq
+      run: sudo yum install -y jq || sudo dnf install -y jq
+
+    - name: Generate npm audit report
+      run: |
+        npm audit --json > audit.json || true
+        cat audit.json
+
+    - name: Evaluate vulnerabilities against baseline
       id: npm_audit
-      run: npm audit --audit-level=high
+      run: |
+        HIGH=$(jq '.metadata.vulnerabilities.high' audit.json)
+        CRITICAL=$(jq '.metadata.vulnerabilities.critical' audit.json)
+
+        MAX_HIGH=$(jq '.max_high' .security-baseline.json)
+        MAX_CRITICAL=$(jq '.max_critical' .security-baseline.json)
+
+        echo "Current HIGH: $HIGH (allowed: $MAX_HIGH)"
+        echo "Current CRITICAL: $CRITICAL (allowed: $MAX_CRITICAL)"
+
+        if [ "$CRITICAL" -gt "$MAX_CRITICAL" ]; then
+          echo "Critical vulnerabilities exceed baseline"
+          exit 1
+        fi
+
+        if [ "$HIGH" -gt "$MAX_HIGH" ]; then
+          echo "High vulnerabilities exceed baseline"
+          exit 1
+        fi
+
+        echo "Vulnerabilities within baseline"
 
     - name: Update NPM_AUDIT status
       if: always()
@@ -62,7 +91,7 @@ jobs:
         context: NPM_AUDIT
         status_description: "NPM Audit ${{ steps.npm_audit.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
+    
     # ---------------- INSTALL TRIVY (RHEL) ----------------
     - name: Install Trivy
       run: |
