@@ -49,12 +49,6 @@ jobs:
         status_description: "Unit Test ${{ steps.unit_tests.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     
-    - name: Docker Build
-      id: docker_build
-      run: |
-        docker build -t ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${APP_VERSION} .
-        docker images
-
     - name: Dependabot Security Gate
       id: dependabot_check
       env:
@@ -82,6 +76,12 @@ jobs:
         else
           echo "No critical/high vulnerabilities"
         fi
+
+    - name: Docker Build
+      id: docker_build
+      run: |
+        docker build -t ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${APP_VERSION} .
+        docker images
 
     - name: Update DOCKER_BUILD status
       if: always()
