@@ -1,4 +1,5 @@
 name: feature-nodejs-pipeline
+
 on:
   workflow_call:
     inputs:
@@ -11,36 +12,30 @@ on:
       environment:
         required: true
         type: string
-    secrets:
-      DEPENDABOT_PAT:
-        required: true
+
+permissions:
+  contents: read
+  statuses: write
+
 env:
   ACCOUNT_ID: 522534289017
 
 jobs:
   feature-nodejs-pipeline:
     runs-on: self-hosted
-    steps: 
-# ---------------- CHECKOUT ----------------
-    - name: checkout code
-      uses: actions/checkout@v6
 
-    - name: list files
-      run: ls -l
+    steps:
+    # ---------------- CHECKOUT ----------------
+    - name: Checkout Code
+      uses: actions/checkout@v4
 
-    - name: Get the version from commit id
-      run: |
-        echo "APP_VERSION=${GITHUB_SHA::9}" >> $GITHUB_ENV
-
-    - name: Print Inputs
-      run: |
-        echo ${{ inputs.project }}
-        echo "App Version is: ${APP_VERSION}"
+    - name: Get version from commit id
+      run: echo "APP_VERSION=${GITHUB_SHA::9}" >> $GITHUB_ENV
 
     - name: Install Dependencies
       run: npm install
 
-# ---------------- UNIT TEST ----------------
+    # ---------------- UNIT TEST ----------------
     - name: Run Unit Tests
       id: unit_tests
       run: echo "Unit test completed"
@@ -54,60 +49,45 @@ jobs:
         status_description: "Unit Test ${{ steps.unit_tests.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-# ---------------- SECURITY GATE ----------------
-    - name: Install jq (RHEL)
-      run: |
-        sudo yum install -y jq || sudo dnf install -y jq
+    # ---------------- NPM SECURITY GATE ----------------
+    - name: NPM Audit (Fail on High/Critical)
+      id: npm_audit
+      run: npm audit --audit-level=high
 
-    - name: Dependabot Security Gate
-      id: dependabot_scan
-      env:
-        GH_TOKEN: ${{ secrets.DEPENDABOT_PAT }}
-        REPO: ${{ github.repository }}
-      run: |
-        echo "Checking Dependabot alerts for $REPO"
-
-        ALERTS=$(curl -s \
-          -H "Authorization: Bearer ${GH_TOKEN}" \
-          -H "Accept: application/vnd.github+json" \
-          "https://api.github.com/repos/${REPO}/dependabot/alerts")
-
-        echo "$ALERTS"
-
-        # Ensure API returned array
-        if ! echo "$ALERTS" | jq -e 'type=="array"' > /dev/null; then
-          echo "Failed to fetch Dependabot alerts"
-          exit 1
-        fi
-
-        CRITICAL=$(echo "$ALERTS" | jq '[.[] | select(.security_advisory.severity=="critical")] | length')
-        HIGH=$(echo "$ALERTS" | jq '[.[] | select(.security_advisory.severity=="high")] | length')
-
-        echo "Critical alerts: $CRITICAL"
-        echo "High alerts: $HIGH"
-
-        if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
-          echo "Security vulnerabilities found!"
-          exit 1
-        else
-          echo "No critical/high vulnerabilities"
-        fi
-
-    - name: Update DEPENDABOT_SCAN status
+    - name: Update NPM_AUDIT status
       if: always()
       uses: azhardevmd/workflows/.github/actions/set-commit-status@main
       with:
-        state: ${{ steps.dependabot_scan.outcome }}
-        context: DEPENDABOT_SCAN
-        status_description: "Dependabot Scan ${{ steps.dependabot_scan.outcome }}"
+        state: ${{ steps.npm_audit.outcome }}
+        context: NPM_AUDIT
+        status_description: "NPM Audit ${{ steps.npm_audit.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-# ---------------- DOCKER BUILD ----------------
+    # ---------------- INSTALL TRIVY (RHEL) ----------------
+    - name: Install Trivy
+      run: |
+        sudo rpm -ivh https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.50.1_Linux-64bit.rpm || true
+        trivy --version
+
+    # ---------------- TRIVY FILESYSTEM SCAN ----------------
+    - name: Trivy Filesystem Scan
+      id: trivy_fs
+      run: trivy fs --exit-code 1 --severity HIGH,CRITICAL .
+
+    - name: Update TRIVY_FS status
+      if: always()
+      uses: azhardevmd/workflows/.github/actions/set-commit-status@main
+      with:
+        state: ${{ steps.trivy_fs.outcome }}
+        context: TRIVY_FS_SCAN
+        status_description: "Trivy FS ${{ steps.trivy_fs.outcome }}"
+        target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+    # ---------------- DOCKER BUILD ----------------
     - name: Docker Build
       id: docker_build
       run: |
         docker build -t ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${APP_VERSION} .
-        docker images
 
     - name: Update DOCKER_BUILD status
       if: always()
@@ -118,15 +98,31 @@ jobs:
         status_description: "Docker Build ${{ steps.docker_build.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-# ---------------- PUSH IMAGE ----------------
+    # ---------------- TRIVY IMAGE SCAN ----------------
+    - name: Trivy Image Scan
+      id: trivy_image
+      run: |
+        trivy image --exit-code 1 --severity HIGH,CRITICAL \
+        ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${APP_VERSION}
+
+    - name: Update TRIVY_IMAGE status
+      if: always()
+      uses: azhardevmd/workflows/.github/actions/set-commit-status@main
+      with:
+        state: ${{ steps.trivy_image.outcome }}
+        context: TRIVY_IMAGE_SCAN
+        status_description: "Trivy Image ${{ steps.trivy_image.outcome }}"
+        target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+    # ---------------- PUSH IMAGE ----------------
     - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v5.1.1
+      uses: aws-actions/configure-aws-credentials@v5
       with:
         aws-region: ${{ secrets.AWS_REGION }}
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-    
-    - name: Puch Images to ECR
+
+    - name: Push Image to ECR
       run: |
         aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
         docker push ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${APP_VERSION}
