@@ -11,6 +11,9 @@ on:
       environment:
         required: true
         type: string
+    secrets:
+      DEPENDABOT_PAT:
+        required: true
 env:
   ACCOUNT_ID: 522534289017
 
@@ -64,11 +67,17 @@ jobs:
         echo "Checking Dependabot alerts for $REPO"
 
         ALERTS=$(curl -s \
-          -H "Authorization: Bearer $GH_TOKEN" \
+          -H "Authorization: Bearer ${GH_TOKEN}" \
           -H "Accept: application/vnd.github+json" \
-          https://api.github.com/repos/$REPO/dependabot/alerts)
+          "https://api.github.com/repos/${REPO}/dependabot/alerts")
 
         echo "$ALERTS"
+
+        # Ensure API returned array
+        if ! echo "$ALERTS" | jq -e 'type=="array"' > /dev/null; then
+          echo "Failed to fetch Dependabot alerts"
+          exit 1
+        fi
 
         CRITICAL=$(echo "$ALERTS" | jq '[.[] | select(.security_advisory.severity=="critical")] | length')
         HIGH=$(echo "$ALERTS" | jq '[.[] | select(.security_advisory.severity=="high")] | length')
