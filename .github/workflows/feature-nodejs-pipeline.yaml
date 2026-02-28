@@ -89,7 +89,7 @@ jobs:
       with:
         state: ${{ steps.dependabot_scan.outcome }}
         context: DEPENDABOT_SCAN
-        status_description: "Unit Test ${{ steps.dependabot_scan.outcome }}"
+        status_description: "Dependabot Scan ${{ steps.dependabot_scan.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 # ---------------- DOCKER BUILD ----------------
