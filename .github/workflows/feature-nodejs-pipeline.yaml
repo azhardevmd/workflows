@@ -40,7 +40,7 @@ jobs:
       id: unit_tests
       run: echo "Unit test completed"
 
-    - name: Update DOCKER_BUILD status
+    - name: Update UNIT_TEST status
       if: always()
       uses: azhardevmd/workflows/.github/actions/set-commit-status@main
       with:
