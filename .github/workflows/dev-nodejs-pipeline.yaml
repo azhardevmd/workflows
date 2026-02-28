@@ -167,4 +167,6 @@ jobs:
 
 # -------------- DEPLOY -------------------
     - name: Authenticate to EKS
-      run: echo "Authentication Success"
+      run: |
+        aws eks update-kubeconfig --region us-east-1 --name robomart-dev
+        kubectl get nodes
