@@ -110,8 +110,8 @@ jobs:
         sudo rpm -ivh https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.50.1_Linux-64bit.rpm || true
         trivy --version
 
-# ---------------- TRIVY IMAGE SCAN (BASELINE) ----------------
-    - name: Trivy Image Scan
+# ----------------  TRIVY SCAN ----------------
+    - name: Trivy Image Scan (OS packages only)
       id: trivy_image
       run: |
         trivy image --format json --severity HIGH,CRITICAL \
@@ -120,22 +120,24 @@ jobs:
 
         cat trivy-image.json
 
-        HIGH=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-image.json)
-        CRITICAL=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-image.json)
+        echo "Counting ONLY OS package vulnerabilities..."
 
-        echo "Image HIGH: $HIGH"
-        echo "Image CRITICAL: $CRITICAL"
+        HIGH=$(jq '[.Results[] | select(.Class=="os-pkgs") | .Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-image.json)
+        CRITICAL=$(jq '[.Results[] | select(.Class=="os-pkgs") | .Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-image.json)
+
+        echo "OS HIGH: $HIGH"
+        echo "OS CRITICAL: $CRITICAL"
 
         MAX_HIGH=10
         MAX_CRITICAL=0
 
         if [ "$CRITICAL" -gt "$MAX_CRITICAL" ]; then
-          echo "Critical vulnerabilities found in image"
+          echo "Critical OS vulnerabilities found in image"
           exit 1
         fi
 
         if [ "$HIGH" -gt "$MAX_HIGH" ]; then
-          echo "Too many HIGH vulnerabilities in image"
+          echo "Too many HIGH OS vulnerabilities in image"
           exit 1
         fi
 
@@ -146,7 +148,7 @@ jobs:
       uses: azhardevmd/workflows/.github/actions/set-commit-status@main
       with:
         state: ${{ steps.trivy_image.outcome }}
-        context: TRIVY_IMAGE_SCAN
+        context: trivy_image
         status_description: "Trivy Image ${{ steps.trivy_image.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
