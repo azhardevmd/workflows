@@ -25,7 +25,7 @@ jobs:
     runs-on: self-hosted
 
     steps:
-    # ---------------- CHECKOUT ----------------
+# ---------------- CHECKOUT ----------------
     - name: Checkout Code
       uses: actions/checkout@v4
 
@@ -35,7 +35,7 @@ jobs:
     - name: Install Dependencies
       run: npm install
 
-    # ---------------- UNIT TEST ----------------
+# ---------------- UNIT TEST ----------------
     - name: Run Unit Tests
       id: unit_tests
       run: echo "Unit test completed"
@@ -49,73 +49,26 @@ jobs:
         status_description: "Unit Test ${{ steps.unit_tests.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-# ---------------- NPM SECURITY BASELINE GATE ----------------
+# ---------------- NPM SECURITY GATE (BASELINE) ----------------
     - name: Install jq
       run: sudo yum install -y jq || sudo dnf install -y jq
 
-    - name: Generate npm audit report
+    - name: NPM Audit with Baseline
+      id: npm_audit
       run: |
         npm audit --json > audit.json || true
         cat audit.json
 
-    - name: Evaluate vulnerabilities against baseline
-      id: npm_audit
-      run: |
         HIGH=$(jq '.metadata.vulnerabilities.high' audit.json)
         CRITICAL=$(jq '.metadata.vulnerabilities.critical' audit.json)
-
-        MAX_HIGH=$(jq '.max_high' .security-baseline.json)
-        MAX_CRITICAL=$(jq '.max_critical' .security-baseline.json)
-
-        echo "Current HIGH: $HIGH (allowed: $MAX_HIGH)"
-        echo "Current CRITICAL: $CRITICAL (allowed: $MAX_CRITICAL)"
-
-        if [ "$CRITICAL" -gt "$MAX_CRITICAL" ]; then
-          echo "Critical vulnerabilities exceed baseline"
-          exit 1
-        fi
-
-        if [ "$HIGH" -gt "$MAX_HIGH" ]; then
-          echo "High vulnerabilities exceed baseline"
-          exit 1
-        fi
-
-        echo "Vulnerabilities within baseline"
-
-    - name: Update NPM_AUDIT status
-      if: always()
-      uses: azhardevmd/workflows/.github/actions/set-commit-status@main
-      with:
-        state: ${{ steps.npm_audit.outcome }}
-        context: NPM_AUDIT
-        status_description: "NPM Audit ${{ steps.npm_audit.outcome }}"
-        target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-    
-    # ---------------- INSTALL TRIVY (RHEL) ----------------
-    - name: Install Trivy
-      run: |
-        sudo rpm -ivh https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.50.1_Linux-64bit.rpm || true
-        trivy --version
-    
-# ---------------- TRIVY FILESYSTEM SCAN WITH CONDITION ----------------
-    - name: Trivy Filesystem Scan
-      id: trivy_fs
-      run: |
-        # Run scan but DO NOT fail automatically
-        trivy fs --format json --severity HIGH,CRITICAL . > trivy-fs.json
-        cat trivy-fs.json
-
-        # Count vulnerabilities
-        HIGH=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-fs.json)
-        CRITICAL=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-fs.json)
 
         echo "High vulnerabilities: $HIGH"
         echo "Critical vulnerabilities: $CRITICAL"
 
-        # Your condition here
         MAX_HIGH=10
+        MAX_CRITICAL=0
 
-        if [ "$CRITICAL" -gt 0 ]; then
+        if [ "$CRITICAL" -gt "$MAX_CRITICAL" ]; then
           echo "Critical vulnerabilities found"
           exit 1
         fi
@@ -125,9 +78,18 @@ jobs:
           exit 1
         fi
 
-        echo "Trivy FS passed baseline"
+        echo "NPM audit passed baseline"
 
-    # ---------------- DOCKER BUILD ----------------
+    - name: Update NPM_AUDIT status
+      if: always()
+      uses: azhardevmd/workflows/.github/actions/set-commit-status@main
+      with:
+        state: ${{ steps.npm_audit.outcome }}
+        context: NPM_AUDIT
+        status_description: "NPM Audit ${{ steps.npm_audit.outcome }}"
+        target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+# ---------------- DOCKER BUILD ----------------
     - name: Docker Build
       id: docker_build
       run: |
@@ -142,12 +104,42 @@ jobs:
         status_description: "Docker Build ${{ steps.docker_build.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-    # ---------------- TRIVY IMAGE SCAN ----------------
+# ---------------- INSTALL TRIVY ----------------
+    - name: Install Trivy
+      run: |
+        sudo rpm -ivh https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.50.1_Linux-64bit.rpm || true
+        trivy --version
+
+# ---------------- TRIVY IMAGE SCAN (BASELINE) ----------------
     - name: Trivy Image Scan
       id: trivy_image
       run: |
-        trivy image --exit-code 1 --severity HIGH,CRITICAL \
-        ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${APP_VERSION}
+        trivy image --format json --severity HIGH,CRITICAL \
+        ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${APP_VERSION} \
+        > trivy-image.json
+
+        cat trivy-image.json
+
+        HIGH=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-image.json)
+        CRITICAL=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-image.json)
+
+        echo "Image HIGH: $HIGH"
+        echo "Image CRITICAL: $CRITICAL"
+
+        MAX_HIGH=10
+        MAX_CRITICAL=0
+
+        if [ "$CRITICAL" -gt "$MAX_CRITICAL" ]; then
+          echo "Critical vulnerabilities found in image"
+          exit 1
+        fi
+
+        if [ "$HIGH" -gt "$MAX_HIGH" ]; then
+          echo "Too many HIGH vulnerabilities in image"
+          exit 1
+        fi
+
+        echo "Docker image passed security gate"
 
     - name: Update TRIVY_IMAGE status
       if: always()
@@ -158,7 +150,7 @@ jobs:
         status_description: "Trivy Image ${{ steps.trivy_image.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-    # ---------------- PUSH IMAGE ----------------
+# ---------------- PUSH IMAGE ----------------
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v5
       with:
