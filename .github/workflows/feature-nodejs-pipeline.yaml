@@ -56,7 +56,7 @@ jobs:
         sudo yum install -y jq || sudo dnf install -y jq
 
     - name: Dependabot Security Gate
-      id: dependabot_check
+      id: dependabot_scan
       env:
         GH_TOKEN: ${{ secrets.DEPENDABOT_PAT }}
         REPO: ${{ github.repository }}
@@ -82,6 +82,15 @@ jobs:
         else
           echo "No critical/high vulnerabilities"
         fi
+
+    - name: Update DEPENDABOT_SCAN status
+      if: always()
+      uses: azhardevmd/workflows/.github/actions/set-commit-status@main
+      with:
+        state: ${{ steps.dependabot_scan.outcome }}
+        context: DEPENDABOT_SCAN
+        status_description: "Unit Test ${{ steps.dependabot_scan.outcome }}"
+        target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 # ---------------- DOCKER BUILD ----------------
     - name: Docker Build
