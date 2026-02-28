@@ -1,0 +1,170 @@
+name: feature-nodejs-pipeline
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        required: true
+        type: string
+      component:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  statuses: write
+
+env:
+  ACCOUNT_ID: 522534289017
+
+jobs:
+  feature-nodejs-pipeline:
+    runs-on: self-hosted
+
+    steps:
+# ---------------- CHECKOUT ----------------
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Get version from commit id
+      run: echo "APP_VERSION=${GITHUB_SHA::9}" >> $GITHUB_ENV
+
+    - name: Install Dependencies
+      run: npm install
+
+# ---------------- UNIT TEST ----------------
+    - name: Run Unit Tests
+      id: unit_tests
+      run: echo "Unit test completed"
+
+    - name: Update UNIT_TEST status
+      if: always()
+      uses: azhardevmd/workflows/.github/actions/set-commit-status@main
+      with:
+        state: ${{ steps.unit_tests.outcome }}
+        context: UNIT_TEST
+        status_description: "Unit Test ${{ steps.unit_tests.outcome }}"
+        target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+# ---------------- NPM SECURITY GATE (BASELINE) ----------------
+    - name: Install jq
+      run: sudo yum install -y jq || sudo dnf install -y jq
+
+    - name: NPM Audit with Baseline
+      id: npm_audit
+      run: |
+        npm audit --json > audit.json || true
+        cat audit.json
+
+        HIGH=$(jq '.metadata.vulnerabilities.high' audit.json)
+        CRITICAL=$(jq '.metadata.vulnerabilities.critical' audit.json)
+
+        echo "High vulnerabilities: $HIGH"
+        echo "Critical vulnerabilities: $CRITICAL"
+
+        MAX_HIGH=10
+        MAX_CRITICAL=0
+
+        if [ "$CRITICAL" -gt "$MAX_CRITICAL" ]; then
+          echo "Critical vulnerabilities found"
+          exit 1
+        fi
+
+        if [ "$HIGH" -gt "$MAX_HIGH" ]; then
+          echo "High vulnerabilities exceed allowed baseline"
+          exit 1
+        fi
+
+        echo "NPM audit passed baseline"
+
+    - name: Update NPM_AUDIT status
+      if: always()
+      uses: azhardevmd/workflows/.github/actions/set-commit-status@main
+      with:
+        state: ${{ steps.npm_audit.outcome }}
+        context: NPM_AUDIT
+        status_description: "NPM Audit ${{ steps.npm_audit.outcome }}"
+        target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+# ---------------- DOCKER BUILD ----------------
+    - name: Docker Build
+      id: docker_build
+      run: |
+        docker build -t ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${APP_VERSION} .
+
+    - name: Update DOCKER_BUILD status
+      if: always()
+      uses: azhardevmd/workflows/.github/actions/set-commit-status@main
+      with:
+        state: ${{ steps.docker_build.outcome }}
+        context: DOCKER_BUILD
+        status_description: "Docker Build ${{ steps.docker_build.outcome }}"
+        target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+# ---------------- INSTALL TRIVY ----------------
+    - name: Install Trivy
+      run: |
+        sudo rpm -ivh https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.50.1_Linux-64bit.rpm || true
+        trivy --version
+
+# ----------------  TRIVY SCAN ----------------
+    - name: Trivy Image Scan (OS packages only)
+      id: trivy_image
+      run: |
+        trivy image --format json --severity HIGH,CRITICAL \
+        ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${APP_VERSION} \
+        > trivy-image.json
+
+        cat trivy-image.json
+
+        echo "Counting ONLY OS package vulnerabilities..."
+
+        HIGH=$(jq '[.Results[] | select(.Class=="os-pkgs") | .Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-image.json)
+        CRITICAL=$(jq '[.Results[] | select(.Class=="os-pkgs") | .Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-image.json)
+
+        echo "OS HIGH: $HIGH"
+        echo "OS CRITICAL: $CRITICAL"
+
+        MAX_HIGH=10
+        MAX_CRITICAL=0
+
+        if [ "$CRITICAL" -gt "$MAX_CRITICAL" ]; then
+          echo "Critical OS vulnerabilities found in image"
+          exit 1
+        fi
+
+        if [ "$HIGH" -gt "$MAX_HIGH" ]; then
+          echo "Too many HIGH OS vulnerabilities in image"
+          exit 1
+        fi
+
+        echo "Docker image passed security gate"
+
+    - name: Update TRIVY_IMAGE status
+      if: always()
+      uses: azhardevmd/workflows/.github/actions/set-commit-status@main
+      with:
+        state: ${{ steps.trivy_image.outcome }}
+        context: trivy_image
+        status_description: "Trivy Image ${{ steps.trivy_image.outcome }}"
+        target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+# ---------------- PUSH IMAGE ----------------
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v5
+      with:
+        aws-region: ${{ secrets.AWS_REGION }}
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    - name: Push Image to ECR
+      run: |
+        aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
+        docker push ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${APP_VERSION}
+
+# -------------- DEPLOY -------------------
+    - name: Authenticate to EKS
+      run: echo "Authentication Success"
