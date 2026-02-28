@@ -50,9 +50,19 @@ jobs:
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     
     - name: Docker Build
+      id: docker_build
       run: |
         docker build -t ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${APP_VERSION} .
         docker images
+
+    - name: Update DOCKER_BUILD status
+      if: always()
+      uses: azhardevmd/workflows/.github/actions/set-commit-status@main
+      with:
+        state: ${{ steps.docker_build.outcome }}
+        context: UNIT_TEST
+        status_description: "Docker Build ${{ steps.docker_build.outcome }}"
+        target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v5.1.1
