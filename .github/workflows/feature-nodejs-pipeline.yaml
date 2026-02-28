@@ -58,7 +58,7 @@ jobs:
     - name: Dependabot Security Gate
       id: dependabot_check
       env:
-        GH_TOKEN: ${{ github.token }}
+        GH_TOKEN: ${{ secrets.DEPENDABOT_PAT }}
         REPO: ${{ github.repository }}
       run: |
         echo "Checking Dependabot alerts for $REPO"
