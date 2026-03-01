@@ -182,6 +182,6 @@ jobs:
       uses: azhardevmd/workflows/.github/actions/set-commit-status@main
       with:
         state: ${{ steps.dev_deploy.outcome }}
-        context: dev_deploy
+        context: DEV_DEPLOY
         status_description: "DEV Deploy ${{ steps.dev_deploy.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

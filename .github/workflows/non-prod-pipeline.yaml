@@ -1,0 +1,98 @@
+name: Non-Prod-Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        required: true
+        type: string
+      component:
+        required: true
+        type: string
+      commit_id:
+        required: true
+        type: string
+      environment:      
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  statuses: read
+
+env:
+  ACCOUNT_ID: 522534289017
+
+jobs:
+  promote:
+    runs-on: self-hosted
+
+    steps:
+    # ---------------- CHECK COMMIT STATUSES ----------------
+    - name: Validate Commit Statuses
+      run: |
+        COMMIT=${{ inputs.commit_id }}
+        REPO=${{ github.repository }}
+        TOKEN=${{ secrets.GITHUB_TOKEN }}
+
+        curl -s -H "Authorization: Bearer $TOKEN" \
+        https://api.github.com/repos/$REPO/commits/$COMMIT/status \
+        > status.json
+
+        REQUIRED=("UNIT_TEST" "NPM_AUDIT" "DOCKER_BUILD" "DEV_DEPLOY")
+
+        for CONTEXT in "${REQUIRED[@]}"; do
+          STATE=$(jq -r ".statuses[] | select(.context==\"$CONTEXT\") | .state" status.json)
+
+          echo "$CONTEXT -> $STATE"
+
+          if [ "$STATE" != "success" ]; then
+            echo "❌ $CONTEXT failed. Cannot promote."
+            exit 1
+          fi
+        done
+
+        echo "✅ All checks passed. Promotion allowed."
+
+    # ---------------- SELECT CLUSTER DYNAMICALLY ----------------
+    - name: Set cluster name
+      run: |
+        if [ "${{ inputs.environment }}" == "qa" ]; then
+          echo "CLUSTER=robomart-qa" >> $GITHUB_ENV
+        elif [ "${{ inputs.environment }}" == "sit" ]; then
+          echo "CLUSTER=robomart-sit" >> $GITHUB_ENV
+        elif [ "${{ inputs.environment }}" == "uat" ]; then
+          echo "CLUSTER=robomart-uat" >> $GITHUB_ENV
+        else
+          echo "Invalid environment"
+          exit 1
+        fi
+
+    # ---------------- AWS AUTH ----------------
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v5
+      with:
+        aws-region: ${{ secrets.AWS_REGION }}
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    # ---------------- EKS LOGIN ----------------
+    - name: Authenticate to EKS
+      run: |
+        aws eks update-kubeconfig --region us-east-1 --name $CLUSTER
+        kubectl get nodes
+
+    # ---------------- CHECKOUT DEPLOY REPO ----------------
+    - name: Checkout Deploy Repo
+      uses: actions/checkout@v4
+      with:
+        repository: azharmd-dev/catalogue-deploy
+
+    # ---------------- DEPLOY ----------------
+    - name: Deploy to Selected Environment
+      run: |
+        helm upgrade --install ${{ inputs.component }} \
+          -f values-${{ inputs.environment }}.yaml \
+          --set deployment.imageVersion=${{ inputs.commit_id }} \
+          -n ${{ inputs.project }} \
+          --atomic --wait --timeout=5m .
