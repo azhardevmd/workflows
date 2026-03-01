@@ -24,7 +24,7 @@ env:
   ACCOUNT_ID: 522534289017
 
 jobs:
-  promote:
+  non-prod-pipeline:
     runs-on: self-hosted
 
     steps:
@@ -92,7 +92,13 @@ jobs:
     - name: Deploy to Selected Environment
       run: |
         helm upgrade --install ${{ inputs.component }} \
-          -f values-${{ inputs.environment }}.yaml \
+          -f values-${{ inpu.yaml \
           --set deployment.imageVersion=${{ inputs.commit_id }} \
           -n ${{ inputs.project }} \
           --atomic --wait --timeout=5m .
+
+        # helm upgrade --install ${{ inputs.component }} \
+        #   -f values-dev.yaml \
+        #   --set deployment.imageVersion=${{ inputs.commit_id }} \
+        #   -n ${{ inputs.project }} \
+        #   --atomic --wait --timeout=5m .
