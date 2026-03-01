@@ -104,12 +104,6 @@ jobs:
         status_description: "Docker Build ${{ steps.docker_build.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-# # ---------------- INSTALL TRIVY ----------------
-#     - name: Install Trivy
-#       run: |
-#         curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin v0.68.2
-#         trivy --version
-
 # # ----------------  TRIVY SCAN ----------------
 #     - name: Trivy Image Scan (OS packages only)
 #       id: trivy_image
