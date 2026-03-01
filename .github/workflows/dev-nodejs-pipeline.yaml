@@ -171,7 +171,7 @@ jobs:
       with: 
         repository: azharmd-dev/catalogue-deploy
 
-# -------------- DEV TO DEPLOY -------------------
+# -------------- DEPLOY TO DEV  -------------------
     - name: Deploy to DEV Cluster
       id: dev_deploy
       run: | 
