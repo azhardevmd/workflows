@@ -90,6 +90,7 @@ jobs:
 
     # ---------------- DEPLOY ----------------
     - name: Deploy to Selected Environment
+      id: deploy_check
       run: |
         helm upgrade --install ${{ inputs.component }} \
           -f values-dev.yaml \
@@ -102,3 +103,13 @@ jobs:
         #   --set deployment.imageVersion=${{ inputs.commit_id }} \
         #   -n ${{ inputs.project }} \
         #   --atomic --wait --timeout=5m .
+
+
+    - name: DEPLOY status
+      if: always()
+      uses: azhardevmd/workflows/.github/actions/set-commit-status@main
+      with:
+        state: ${{ steps.deploy_check.outcome }}
+        context: "${{ inputs.environment }}-DEPLOY"
+        status_description: "${{ inputs.environment }} ${{ steps.deploy_check.outcome }}"
+        target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
