@@ -92,13 +92,13 @@ jobs:
     - name: Deploy to Selected Environment
       run: |
         helm upgrade --install ${{ inputs.component }} \
-          -f values-${{ inpu.yaml \
+          -f values-dev.yaml \
           --set deployment.imageVersion=${{ inputs.commit_id }} \
           -n ${{ inputs.project }} \
           --atomic --wait --timeout=5m .
-
+          
         # helm upgrade --install ${{ inputs.component }} \
-        #   -f values-dev.yaml \
+        #   -f values-${{ inputs.environment }}.yaml \
         #   --set deployment.imageVersion=${{ inputs.commit_id }} \
         #   -n ${{ inputs.project }} \
         #   --atomic --wait --timeout=5m .
