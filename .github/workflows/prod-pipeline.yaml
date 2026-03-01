@@ -28,6 +28,7 @@ jobs:
     runs-on: self-hosted
 
     steps:
+
     # ---------------- VALIDATE FULL PROMOTION CHAIN ----------------
     - name: Validate Promotion Chain
       run: |
@@ -58,7 +59,7 @@ jobs:
           fi
         done
 
-        echo " Promotion chain validated. Prod deploy allowed."
+        echo "Promotion chain validated. Prod deploy allowed."
 
     # ---------------- AWS AUTH ----------------
     - name: Configure AWS Credentials
