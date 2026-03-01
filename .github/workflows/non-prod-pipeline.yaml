@@ -55,18 +55,18 @@ jobs:
         echo "✅ All checks passed. Promotion allowed."
 
     # ---------------- SELECT CLUSTER DYNAMICALLY ----------------
-    - name: Set cluster name
-      run: |
-        if [ "${{ inputs.environment }}" == "qa" ]; then
-          echo "CLUSTER=robomart-qa" >> $GITHUB_ENV
-        elif [ "${{ inputs.environment }}" == "sit" ]; then
-          echo "CLUSTER=robomart-sit" >> $GITHUB_ENV
-        elif [ "${{ inputs.environment }}" == "uat" ]; then
-          echo "CLUSTER=robomart-uat" >> $GITHUB_ENV
-        else
-          echo "Invalid environment"
-          exit 1
-        fi
+    # - name: Set cluster name
+    #   run: |
+    #     if [ "${{ inputs.environment }}" == "qa" ]; then
+    #       echo "CLUSTER=robomart-qa" >> $GITHUB_ENV
+    #     elif [ "${{ inputs.environment }}" == "sit" ]; then
+    #       echo "CLUSTER=robomart-sit" >> $GITHUB_ENV
+    #     elif [ "${{ inputs.environment }}" == "uat" ]; then
+    #       echo "CLUSTER=robomart-uat" >> $GITHUB_ENV
+    #     else
+    #       echo "Invalid environment"
+    #       exit 1
+    #     fi
 
     # ---------------- AWS AUTH ----------------
     - name: Configure AWS Credentials
@@ -78,8 +78,8 @@ jobs:
 
     # ---------------- EKS LOGIN ----------------
     - name: Authenticate to EKS
-      run: |
-        aws eks update-kubeconfig --region us-east-1 --name $CLUSTER
+      run: | # $CLUSTER
+        aws eks update-kubeconfig --region us-east-1 --name  robomart-dev 
         kubectl get nodes
 
     # ---------------- CHECKOUT DEPLOY REPO ----------------
