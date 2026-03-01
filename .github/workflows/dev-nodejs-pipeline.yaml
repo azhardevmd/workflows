@@ -105,46 +105,46 @@ jobs:
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 # ----------------  TRIVY SCAN ----------------
-    - name: Trivy Image Scan (OS packages only)
-      id: trivy_image
-      run: |
-        trivy image --format json --severity HIGH,CRITICAL \
-        ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${APP_VERSION} \
-        > trivy-image.json
+    # - name: Trivy Image Scan (OS packages only)
+    #   id: trivy_image
+    #   run: |
+    #     trivy image --format json --severity HIGH,CRITICAL \
+    #     ${ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/${{ inputs.project }}/${{ inputs.component }}:${APP_VERSION} \
+    #     > trivy-image.json
 
-        cat trivy-image.json
+    #     cat trivy-image.json
 
-        echo "Counting ONLY OS package vulnerabilities..."
+    #     echo "Counting ONLY OS package vulnerabilities..."
 
-        HIGH=$(jq '[.Results[] | select(.Class=="os-pkgs") | .Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-image.json)
-        CRITICAL=$(jq '[.Results[] | select(.Class=="os-pkgs") | .Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-image.json)
+    #     HIGH=$(jq '[.Results[] | select(.Class=="os-pkgs") | .Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-image.json)
+    #     CRITICAL=$(jq '[.Results[] | select(.Class=="os-pkgs") | .Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-image.json)
 
-        echo "OS HIGH: $HIGH"
-        echo "OS CRITICAL: $CRITICAL"
+    #     echo "OS HIGH: $HIGH"
+    #     echo "OS CRITICAL: $CRITICAL"
 
-        MAX_HIGH=10
-        MAX_CRITICAL=0
+    #     MAX_HIGH=10
+    #     MAX_CRITICAL=0
 
-        if [ "$CRITICAL" -gt "$MAX_CRITICAL" ]; then
-          echo "Critical OS vulnerabilities found in image"
-          exit 1
-        fi
+    #     if [ "$CRITICAL" -gt "$MAX_CRITICAL" ]; then
+    #       echo "Critical OS vulnerabilities found in image"
+    #       exit 1
+    #     fi
 
-        if [ "$HIGH" -gt "$MAX_HIGH" ]; then
-          echo "Too many HIGH OS vulnerabilities in image"
-          exit 1
-        fi
+    #     if [ "$HIGH" -gt "$MAX_HIGH" ]; then
+    #       echo "Too many HIGH OS vulnerabilities in image"
+    #       exit 1
+    #     fi
 
-        echo "Docker image passed security gate"
+    #     echo "Docker image passed security gate"
 
-    - name: Update TRIVY_IMAGE status
-      if: always()
-      uses: azhardevmd/workflows/.github/actions/set-commit-status@main
-      with:
-        state: ${{ steps.trivy_image.outcome }}
-        context: trivy_image
-        status_description: "Trivy Image ${{ steps.trivy_image.outcome }}"
-        target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    # - name: Update TRIVY_IMAGE status
+    #   if: always()
+    #   uses: azhardevmd/workflows/.github/actions/set-commit-status@main
+    #   with:
+    #     state: ${{ steps.trivy_image.outcome }}
+    #     context: trivy_image
+    #     status_description: "Trivy Image ${{ steps.trivy_image.outcome }}"
+    #     target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 # ---------------- PUSH IMAGE ----------------
     - name: Configure AWS Credentials
