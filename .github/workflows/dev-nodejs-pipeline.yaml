@@ -37,16 +37,16 @@ jobs:
 
 # ---------------- UNIT TEST ----------------
     - name: Run Unit Tests
-      id: unit_tests
+      id: unit_test
       run: echo "Unit test completed"
 
     - name: Update UNIT_TEST status
       if: always()
       uses: azhardevmd/workflows/.github/actions/set-commit-status@main
       with:
-        state: ${{ steps.unit_tests.outcome }}
+        state: ${{ steps.unit_test.outcome }}
         context: UNIT_TEST
-        status_description: "Unit Test ${{ steps.unit_tests.outcome }}"
+        status_description: "Unit Test ${{ steps.unit_test.outcome }}"
         target_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 # ---------------- NPM SECURITY GATE (BASELINE) ----------------
